@@ -26,7 +26,6 @@ jobs:
       - name: 编译
         run: |
           #系统apt安装的arm-none-eabi-gcc直接在PATH里，无需额外配置
-          cd u-boot-onecloud
           make distclean
           make m8b_onecloud_config
           make NO_WERROR=1 -j$(nproc)
@@ -50,18 +49,17 @@ jobs:
           cat <<EOF >resource/list.txt
           090000:bootup:bootup.bmp
           EOF
-          ./AmlImg res_pack u-boot-onecloud/build/resource.img resource/
+          ./AmlImg res_pack build/resource.img resource/
 
       - name: 生成 eMMC 直刷底包
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p pack
-          cd u-boot-onecloud
-          cp build/ddr_init.bin ../pack/DDR.USB
-          cp build/u-boot-comp.bin ../pack/UBOOT_COMP.USB
+          cp build/ddr_init.bin pack/DDR.USB
+          cp build/u-boot-comp.bin pack/UBOOT_COMP.USB
 
-          cat <<EOF >../pack/aml_sdc_burn.ini
+          cat <<EOF >pack/aml_sdc_burn.ini
           [common]
           erase_bootloader    = 1
           erase_flash         = 0
@@ -73,7 +71,7 @@ jobs:
           ;media       =
           EOF
 
-          cat <<EOF >../pack/platform.conf
+          cat <<EOF >pack/platform.conf
           Platform:0x0801
           BinPara:0xd9010000
           DDRLoad:0xd9000000
@@ -82,13 +80,13 @@ jobs:
           Uboot_decomp:0xd9000030
           EOF
 
-          cp build/u-boot.bin ../pack/bootloader.img
-          echo -n "sha1sum $(sha1sum build/u-boot.bin | awk '{print $1}')" >../pack/bootloader.VERIFY
+          cp build/u-boot.bin pack/bootloader.img
+          echo -n "sha1sum $(sha1sum build/u-boot.bin | awk '{print $1}')" >pack/bootloader.VERIFY
 
-          cp build/resource.img ../pack/resource.img
-          echo -n "sha1sum $(sha1sum build/resource.img | awk '{print $1}')" >../pack/resource.VERIFY
+          cp build/resource.img pack/resource.img
+          echo -n "sha1sum $(sha1sum build/resource.img | awk '{print $1}')" >pack/resource.VERIFY
 
-          cat <<EOF >../pack/commands.txt
+          cat <<EOF >pack/commands.txt
           USB:DDR:normal:DDR.USB
           USB:UBOOT_COMP:normal:UBOOT_COMP.USB
 
@@ -101,8 +99,7 @@ jobs:
           PARTITION:resource:normal:resource.img
           VERIFY:resource:normal:resource.VERIFY
           EOF
-          cd ..
-          ./AmlImg pack u-boot-onecloud/build/eMMC.burn.img pack/
+          ./AmlImg pack build/eMMC.burn.img pack/
           
           export OWRT_DATE=$(TZ=Asia/Shanghai date +"%y.%m.%d_%H.%M.%S")
           echo "OWRT_DATE=$OWRT_DATE" >> $GITHUB_ENV
@@ -110,9 +107,9 @@ jobs:
       - name: 整理固件
         run: |
           mkdir -p outfile
-          cp u-boot-onecloud/build/*.bin ./outfile
-          cp u-boot-onecloud/build/resource.img ./outfile
-          cp u-boot-onecloud/build/eMMC.burn.img ./outfile
+          cp build/*.bin ./outfile
+          cp build/resource.img ./outfile
+          cp build/eMMC.burn.img ./outfile
 
       - name: 上传EMMC直刷底包
         uses: ncipollo/release-action@v1
