@@ -8,31 +8,48 @@ on:
   workflow_dispatch:
 
 #CI权限
-permissions: write-all
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: 检查项目
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
-          #sudo rm /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt update
-          sudo apt install make imagemagick
+          sudo apt install -y make imagemagick build-essential bc device-tree-compiler python3 bison flex
+
+      - name: 缓存Linaro工具链
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi
+            gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz
+          key: ${{ runner.os }}-linaro7.5-2019.12
 
       - name: 下载依赖
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
-          curl -L -O https://releases.linaro.org/components/toolchain/binaries/7.5-2019.12/arm-none-eabi/gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz
+          #国内镜像，稳定性更好，免注册
+          curl --retry 3 -L -O https://mirrors.dotsrc.org/linaro/components/toolchain/binaries/7.5-2019.12/arm-none-eabi/gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz
           tar xvf gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz
+          echo "TOOLCHAIN_DIR=gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi" >> $GITHUB_ENV
+
+      - name: 加载工具链目录名（缓存命中时用）
+        if: steps.cache-toolchain.outputs.cache-hit == 'true'
+        run: |
           echo "TOOLCHAIN_DIR=gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi" >> $GITHUB_ENV
 
       - name: 编译
         run: |
           export PATH="$PATH:${PWD}/${{ env.TOOLCHAIN_DIR }}/bin"
-
+          # 关键！进入u-boot源码目录（和你上次日志目录匹配 u-boot-onecloud）
+          cd u-boot-onecloud
           make distclean
           make m8b_onecloud_config
           make -j$(nproc)
@@ -40,7 +57,7 @@ jobs:
       - name: 下载 AmlImg
         run: |
           ver="v0.3.2"
-          curl -L -o ./AmlImg https://github.com/hhyj2002/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64
+          curl --retry 3 -L -o ./AmlImg https://github.com/hhyj2002/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64
           chmod +x ./AmlImg
 
       - name: 生成资源
@@ -56,19 +73,18 @@ jobs:
           cat <<EOF >resource/list.txt
           090000:bootup:bootup.bmp
           EOF
-          ./AmlImg res_pack build/resource.img resource/
+          ./AmlImg res_pack u-boot-onecloud/build/resource.img resource/
 
       - name: 生成 eMMC 直刷底包
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWRT_DATE: $(TZ=UTC-8 date +"%y.%m.%d_%H.%M.%S")
         run: |
           mkdir -p pack
+          cd u-boot-onecloud
+          cp build/ddr_init.bin ../pack/DDR.USB
+          cp build/u-boot-comp.bin ../pack/UBOOT_COMP.USB
 
-          cp build/ddr_init.bin pack/DDR.USB
-          cp build/u-boot-comp.bin pack/UBOOT_COMP.USB
-
-          cat <<EOF >pack/aml_sdc_burn.ini
+          cat <<EOF >../pack/aml_sdc_burn.ini
           [common]
           erase_bootloader    = 1
           erase_flash         = 0
@@ -80,7 +96,7 @@ jobs:
           ;media       =
           EOF
 
-          cat <<EOF >pack/platform.conf
+          cat <<EOF >../pack/platform.conf
           Platform:0x0801
           BinPara:0xd9010000
           DDRLoad:0xd9000000
@@ -89,13 +105,13 @@ jobs:
           Uboot_decomp:0xd9000030
           EOF
 
-          cp build/u-boot.bin pack/bootloader.img
-          echo -n "sha1sum $(sha1sum pack/bootloader.img | awk '{print $1}')" >pack/bootloader.VERIFY
+          cp build/u-boot.bin ../pack/bootloader.img
+          echo -n "sha1sum $(sha1sum build/u-boot.bin | awk '{print $1}')" >../pack/bootloader.VERIFY
 
-          cp build/resource.img pack/resource.img
-          echo -n "sha1sum $(sha1sum pack/resource.img | awk '{print $1}')" >pack/resource.VERIFY
+          cp build/resource.img ../pack/resource.img
+          echo -n "sha1sum $(sha1sum build/resource.img | awk '{print $1}')" >../pack/resource.VERIFY
 
-          cat <<EOF >pack/commands.txt
+          cat <<EOF >../pack/commands.txt
           USB:DDR:normal:DDR.USB
           USB:UBOOT_COMP:normal:UBOOT_COMP.USB
 
@@ -107,25 +123,20 @@ jobs:
 
           PARTITION:resource:normal:resource.img
           VERIFY:resource:normal:resource.VERIFY
-
-          # PARTITION:boot:normal:boot.img
-          # VERIFY:boot:normal:boot.VERIFY
-          # PARTITION:rootfs:normal:rootfs.img
-          # VERIFY:rootfs:normal:rootfs.VERIFY
           EOF
-
-          ./AmlImg pack build/eMMC.burn.img pack/
+          cd ..
+          ./AmlImg pack u-boot-onecloud/build/eMMC.burn.img pack/
           
-          #信息
-          export OWRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d_%H.%M.%S")
+          #北京时间
+          export OWRT_DATE=$(TZ=Asia/Shanghai date +"%y.%m.%d_%H.%M.%S")
           echo "OWRT_DATE=$OWRT_DATE" >> $GITHUB_ENV
           
       - name: 整理固件
         run: |
           mkdir -p outfile
-          sudo cp build/*.bin ./outfile
-          sudo cp build/resource.img ./outfile
-          sudo cp build/eMMC.burn.img ./outfile
+          cp u-boot-onecloud/build/*.bin ./outfile
+          cp u-boot-onecloud/build/resource.img ./outfile
+          cp u-boot-onecloud/build/eMMC.burn.img ./outfile
 
       - name: 上传EMMC直刷底包
         uses: ncipollo/release-action@v1
@@ -138,5 +149,5 @@ jobs:
             =============基本信息============
 
             源码：https://github.com/hzyitc/u-boot-onecloud
-            平台：liunx/armv7
+            平台：linux/armv7
           artifacts: outfile/*
