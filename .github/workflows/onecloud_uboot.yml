@@ -15,19 +15,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y make imagemagick bc build-essential flex bison python3 device-tree-compiler bzip2
+          sudo apt install -y make imagemagick bc build-essential flex bison python3 device-tree-compiler xz-utils
 
-      - name: 下载 gcc‑arm‑none‑eabi‑4_8‑2014q1
+      - name: 下载 gcc‑linaro‑arm‑none‑eabi‑4.8‑2014.04（阿里云镜像）
         run: |
-          FILE_NAME="gcc-arm-none-eabi-4_8-2014q1-20140314-linux.tar.bz2"
-          curl --retry 5 -L -o ${FILE_NAME} https://launchpadlibrarian.net/170926605/gcc-arm-none-eabi-4_8-2014q1-20140314-linux.tar.bz2
-          FILESIZE=$(stat -c%s ${FILE_NAME})
-          if [ $FILESIZE -lt 80000000 ];then echo "工具链下载失败，文件过小！";exit 1;fi
-          tar -jxf ./${FILE_NAME}
+          FILE_NAME="gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz"
+          curl --retry 10 --retry-delay 5 --connect-timeout 20 -L -o ${FILE_NAME} https://mirrors.aliyun.com/armbian-releases/_toolchain/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
+          tar -xf ./${FILE_NAME}
 
       - name: 编译U‑Boot
         run: |
-          TOOLCHAIN_DIR=$(pwd)/gcc-arm-none-eabi-4_8-2014q1/bin
+          TOOLCHAIN_DIR=$(pwd)/gcc-linaro-arm-none-eabi-4.8-2014.04_linux/bin
           export PATH="${TOOLCHAIN_DIR}:$PATH"
           export CROSS_COMPILE=arm-none-eabi-
           arm-none-eabi-gcc --version
@@ -135,6 +133,6 @@ jobs:
             自用玩客云直刷底包eMMC.burn.img！刷写底包将抹去所有信息！
             =============基本信息============
             源码：https://github.com/hzyitc/u-boot-onecloud
-            编译工具链：gcc‑arm‑none‑eabi‑4_8‑2014q1
+            编译工具链：gcc‑linaro‑arm‑none‑eabi‑4.8‑2014.04（阿里云镜像）
             平台：Amlogic S805 玩客云
           artifacts: outfile/*
