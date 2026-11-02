@@ -1,4 +1,4 @@
-name: 构建玩客云uboot[rmoyulong修改]
+name: 构建玩客云uboot
 
 on:
   #自动编译：每天早上4点
