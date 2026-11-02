@@ -24,7 +24,7 @@ jobs:
 
       - name: 下载 Linaro 4.8 工具链（和原版一致）
         run: |
-          curl -L -O https://redirect.armbian.com/_toolchain/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
+          curl -L -O https://launchpad.net/gcc-linaro/4.8/4.8-2014.04/+download/gcc-linaro-4.8-2014.04.tar.xz
           tar xvf ./gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
 
       - name: 编译
