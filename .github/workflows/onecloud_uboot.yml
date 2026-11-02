@@ -13,16 +13,19 @@ jobs:
       - name: 检出源码
         uses: actions/checkout@v4
 
-      - name: 安装基础依赖
+      - name: 安装依赖 + gcc7 armhf交叉编译器（PPA源，无外部大文件下载）
         run: |
           sudo apt update
-          sudo apt install -y make imagemagick build-essential bc device-tree-compiler python3 bison flex wget tar
-
-      - name: 下载 Linaro GCC7.5 (GitHub镜像，绕过linaro官网拦截)
-        run: |
-          wget -q https://github.com/hzyitc/toolchain-gcc-linaro7.5/raw/main/gcc-linaro-7.5.0-2019.12-x86_64_arm-linux-gnueabihf.tar.xz
-          tar -xf gcc-linaro-7.5.0-2019.12-x86_64_arm-linux-gnueabihf.tar.xz
-          echo "$PWD/gcc-linaro-7.5.0-2019.12-x86_64_arm-linux-gnueabihf/bin" >> $GITHUB_PATH
+          # 添加gcc工具链ppa源
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt update
+          # 安装gcc7/g++7 armhf交叉编译套件
+          sudo apt install -y make imagemagick build-essential bc device-tree-compiler python3 bison flex
+          sudo apt install -y gcc-7-arm-linux-gnueabihf g++-7-arm-linux-gnueabihf
+          # 创建软链接，简化CROSS_COMPILE
+          ln -sf /usr/bin/arm-linux-gnueabihf-gcc-7 $HOME/.local/bin/arm-linux-gnueabihf-gcc
+          ln -sf /usr/bin/arm-linux-gnueabihf-g++-7 $HOME/.local/bin/arm-linux-gnueabihf-g++
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: 编译U-Boot
         run: |
@@ -93,10 +96,10 @@ jobs:
           VERIFY:resource:normal:resource.VERIFY
           EOF
           ./AmlImg pack build/eMMC.burn.img pack/
-          
+
           export OWRT_DATE=$(TZ=Asia/Shanghai date +"%y.%m.%d_%H.%M.%S")
           echo "OWRT_DATE=$OWRT_DATE" >> $GITHUB_ENV
-          
+
       - name: 整理固件
         run: |
           mkdir -p outfile
