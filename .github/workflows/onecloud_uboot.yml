@@ -1,13 +1,8 @@
-name: 构建玩客云uboot
+name: 构建玩客云uboot[rmoyulong修改]
 
 on:
-  #自动编译：每天早上4点
-  #schedule:
-    #- cron: 0 20 * * *
-  #手动编译
   workflow_dispatch:
 
-#CI权限
 permissions: write-all
 
 jobs:
@@ -20,17 +15,22 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y make imagemagick bc build-essential flex make bison python3 device-tree-compiler
+          sudo apt install -y make imagemagick bc build-essential flex bison python3 device-tree-compiler
 
-      - name: 下载 Linaro 4.8 工具链（和原版一致）
+      - name: 下载 gcc-arm-embedded 4.8-2014q4 (原版工具链)
         run: |
-          curl -L -O https://launchpad.net/gcc-linaro/4.8/4.8-2014.04/+download/gcc-linaro-4.8-2014.04.tar.xz
-          tar xvf ./gcc-linaro-4.8-2014.04.tar.xz
+          FILE_NAME="gcc-arm-embedded-4.8-2014-q4-major-linux.tar.bz2"
+          curl --retry 5 -L -o ${FILE_NAME} https://launchpad.net/gcc-arm-embedded/4.8/4.8-2014-q4-major/+download/gcc-arm-embedded-4.8-2014-q4-major-linux.tar.bz2
+          FILESIZE=$(stat -c%s ${FILE_NAME})
+          if [ $FILESIZE -lt 80000000 ];then echo "工具链下载失败，文件过小！";exit 1;fi
+          tar -jxvf ./${FILE_NAME}
 
-      - name: 编译
+      - name: 编译U-Boot
         run: |
-          export PATH="$PATH:$(pwd)/gcc-linaro-4.8-2014.04/bin"
+          TOOLCHAIN_DIR=$(pwd)/gcc-arm-embedded-4.8-2014-q4-major/bin
+          export PATH="${TOOLCHAIN_DIR}:$PATH"
           export CROSS_COMPILE=arm-none-eabi-
+          arm-none-eabi-gcc --version
           make distclean
           make m8b_onecloud_config
           make -j$(nproc)
@@ -38,10 +38,10 @@ jobs:
       - name: 下载 AmlImg
         run: |
           ver="v0.3.2"
-          curl -L -o ./AmlImg https://github.com/rmoyulong/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64
+          curl --retry 3 -L -o ./AmlImg https://github.com/rmoyulong/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64
           chmod +x ./AmlImg
 
-      - name: 生成资源
+      - name: 生成资源图片resource.img
         run: |
           mkdir -p resource
 
@@ -59,7 +59,6 @@ jobs:
       - name: 生成 eMMC 直刷底包
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWRT_DATE: $(TZ=UTC-8 date +"%y.%m.%d_%H.%M.%S")
         run: |
           mkdir -p pack
 
@@ -88,10 +87,12 @@ jobs:
           EOF
 
           cp build/u-boot.bin pack/bootloader.img
-          echo -n "sha1sum $(sha1sum build/u-boot.bin | awk '{print $1}')" >pack/bootloader.VERIFY
+          SHA1_UBOOT=$(sha1sum build/u-boot.bin | awk '{print $1}')
+          echo -n "${SHA1_UBOOT}" >pack/bootloader.VERIFY
 
           cp build/resource.img pack/resource.img
-          echo -n "sha1sum $(sha1sum build/resource.img | awk '{print $1}')" >pack/resource.VERIFY
+          SHA1_RES=$(sha1sum build/resource.img | awk '{print $1}')
+          echo -n "${SHA1_RES}" >pack/resource.VERIFY
 
           cat <<EOF >pack/commands.txt
           USB:DDR:normal:DDR.USB
@@ -114,18 +115,17 @@ jobs:
 
           ./AmlImg pack build/eMMC.burn.img pack/
 
-          #信息
-          export OWRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d_%H.%M.%S")
+          OWRT_DATE=$(TZ=Asia/Shanghai date +"%y.%m.%d_%H.%M.%S")
           echo "OWRT_DATE=$OWRT_DATE" >> $GITHUB_ENV
 
-      - name: 整理固件
+      - name: 整理固件输出文件
         run: |
           mkdir -p outfile
           cp build/*.bin ./outfile
           cp build/resource.img ./outfile
           cp build/eMMC.burn.img ./outfile
 
-      - name: 上传EMMC直刷底包
+      - name: 上传EMMC直刷底包到Release
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
@@ -134,7 +134,7 @@ jobs:
           body: |
             自用玩客云直刷底包eMMC.burn.img！刷写底包将抹去所有信息！
             =============基本信息============
-
             源码：https://github.com/hzyitc/u-boot-onecloud
-            平台：linux/armv7
+            编译工具链：gcc-arm-embedded 4.8-2014q4（原版）
+            平台：Amlogic S805 玩客云
           artifacts: outfile/*
