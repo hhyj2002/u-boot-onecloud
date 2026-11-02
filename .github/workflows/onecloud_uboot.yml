@@ -35,8 +35,9 @@ jobs:
       - name: 下载依赖
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
-          #国内镜像，稳定性更好，免注册
-          curl --retry 3 -L -O https://mirrors.dotsrc.org/linaro/components/toolchain/binaries/7.5-2019.12/arm-none-eabi/gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz
+          curl --retry 5 -L -O https://releases.linaro.org/components/toolchain/binaries/7.5-2019.12/arm-none-eabi/gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz
+          FILESIZE=$(stat -c%s gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz)
+          if [ $FILESIZE -lt 10000000 ];then echo "文件下载异常，文件过小！";exit 1;fi
           tar xvf gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz
           echo "TOOLCHAIN_DIR=gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi" >> $GITHUB_ENV
 
@@ -48,7 +49,6 @@ jobs:
       - name: 编译
         run: |
           export PATH="$PATH:${PWD}/${{ env.TOOLCHAIN_DIR }}/bin"
-          # 关键！进入u-boot源码目录（和你上次日志目录匹配 u-boot-onecloud）
           cd u-boot-onecloud
           make distclean
           make m8b_onecloud_config
@@ -127,7 +127,6 @@ jobs:
           cd ..
           ./AmlImg pack u-boot-onecloud/build/eMMC.burn.img pack/
           
-          #北京时间
           export OWRT_DATE=$(TZ=Asia/Shanghai date +"%y.%m.%d_%H.%M.%S")
           echo "OWRT_DATE=$OWRT_DATE" >> $GITHUB_ENV
           
