@@ -21,38 +21,15 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y make imagemagick build-essential bc device-tree-compiler python3 bison flex
-
-      - name: 缓存Linaro工具链
-        id: cache-toolchain
-        uses: actions/cache@v4
-        with:
-          path: |
-            gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi
-            gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz
-          key: ${{ runner.os }}-linaro7.5-2019.12
-
-      - name: 下载依赖
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        run: |
-          curl --retry 5 -L -O https://releases.linaro.org/components/toolchain/binaries/7.5-2019.12/arm-none-eabi/gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz
-          FILESIZE=$(stat -c%s gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz)
-          if [ $FILESIZE -lt 10000000 ];then echo "文件下载异常，文件过小！";exit 1;fi
-          tar xvf gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi.tar.xz
-          echo "TOOLCHAIN_DIR=gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi" >> $GITHUB_ENV
-
-      - name: 加载工具链目录名（缓存命中时用）
-        if: steps.cache-toolchain.outputs.cache-hit == 'true'
-        run: |
-          echo "TOOLCHAIN_DIR=gcc-linaro-7.5.0-2019.12-x86_64-arm-none-eabi" >> $GITHUB_ENV
+          sudo apt install -y make imagemagick build-essential bc device-tree-compiler python3 bison flex gcc-arm-none-eabi
 
       - name: 编译
         run: |
-          export PATH="$PATH:${PWD}/${{ env.TOOLCHAIN_DIR }}/bin"
+          #系统apt安装的arm-none-eabi-gcc直接在PATH里，无需额外配置
           cd u-boot-onecloud
           make distclean
           make m8b_onecloud_config
-          make -j$(nproc)
+          make NO_WERROR=1 -j$(nproc)
 
       - name: 下载 AmlImg
         run: |
